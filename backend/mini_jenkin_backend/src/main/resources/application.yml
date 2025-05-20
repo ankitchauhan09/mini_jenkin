@@ -1,0 +1,23 @@
+server:
+  port: 8095
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mini_jenkin
+    username: postgres
+    password: ankit
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  data:
+    jdbc:
+      dialect: postgresql
+
+
+default:
+  REPO_BASE_DIR: "C:\\mini-jenkin\\files\\"
+
+jwt:
+  secret: "qM7wprhpWRP1EFS9Se/gIpx6weN4Z4T3+EYQXAJn1aw="
+debug: true
