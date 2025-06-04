@@ -120,7 +120,7 @@
                             .build();
 
                     buildLogsRepository.save(buildLogs);
-
+    
                     throw new RuntimeException("Stage failed: " + stage.getName() + " - " + e.getMessage(), e);
                 }
             }
