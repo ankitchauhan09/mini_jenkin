@@ -1,6 +1,6 @@
 // pages/project/[id].tsx
 "use client";
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useRef  } from 'react';
 import Head from 'next/head';
 import {useParams, useRouter} from "next/navigation";
 import Navbar from '../../components/Navbar';
@@ -17,18 +17,34 @@ import {
     Play,
     RefreshCw,
     Settings,
-    Terminal
+    Terminal,
+    Trash
 } from 'lucide-react';
 import {useUser} from "@/app/context/UserContext";
 import {
+    clearProjectLogs,
     executeProject,
     getAllBuildLogs,
     getProjectById,
     getProjectLogs,
-    loadAllProjectLogs,
+    loadAllProjectLogs, scheduleProjectExecution,
     updateProjectConfig
 } from "@/app/services/PipelineService";
 import { toast } from 'sonner';
+// Add PipelineStage and PipelineRequest interfaces
+interface PipelineStage {
+    name: string;
+    command: string;
+}
+
+interface PipelineRequest {
+    name: string;
+    stages: PipelineStage[];
+}
+
+interface PipelineConfig {
+    pipelineRequest: PipelineRequest;
+}
 
 // Define types based on provided data structure
 interface ProjectConfig {
@@ -49,6 +65,7 @@ interface Project {
     projectName: string;
     createDateTime: string;
     projectConfig: ProjectConfig;
+    pipelineConfig?: PipelineConfig; // Add pipelineConfig
 }
 
 interface LogEntry {
@@ -74,12 +91,17 @@ const ProjectDetails: React.FC = () => {
     const [project, setProject] = useState<Project | null>(null);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [buildHistory, setBuildHistory] = useState<BuildHistory[]>([]);
+    const [showConfigurePipeline, setShowConfigurePipeline] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isExecuting, setIsExecuting] = useState<boolean>(false);
-    const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
+    // const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
     const [lastLogId, setLastLogId] = useState<number | null>(null);
     const [refreshingBuildLogs, setRefreshingBuildLogs] = useState<Boolean>(false)
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [scheduleDateTime, setScheduleDateTime] = useState('');
+    const [isScheduling, setIsScheduling] = useState(false);
+    const scheduleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isEditMode, setIsEditMode] = useState<Boolean>(false)
     const [configForm, setConfigForm] = useState({
         githubUrl: '',
@@ -94,6 +116,43 @@ const ProjectDetails: React.FC = () => {
         shellCommand: ''
     });
 
+    const clearLogs = async () => {
+        const response = await clearProjectLogs(projectId!!);
+        if(response.success) {
+            setLogs([])
+            toast('Project logs cleared successfully');
+        } else {
+            toast.error('Failed to clear project logs');
+        }
+    }
+
+    const handleScheduleBuild = async () => {
+        if (!scheduleDateTime || !projectId) return;
+        setIsScheduling(true);
+        const result = await scheduleExecution(projectId, scheduleDateTime);
+        setIsScheduling(false);
+        setShowScheduleModal(false);
+        if (result.success) {
+            toast.success('Project execution scheduled successfully!');
+            // Reminder: show a toaster 1 minute before scheduled time
+            const scheduledTime = new Date(scheduleDateTime).getTime();
+            const now = Date.now();
+            const msUntilReminder = scheduledTime - now - 60000; // 1 min before
+            if (msUntilReminder > 0) {
+                scheduleTimeoutRef.current = setTimeout(() => {
+                    toast.info('Reminder: Project build will start in 1 minute!');
+                }, msUntilReminder);
+            }
+        } else {
+            toast.error(result.message || 'Failed to schedule project execution');
+        }
+    };
+    useEffect(() => {
+        return () => {
+            if (scheduleTimeoutRef.current) clearTimeout(scheduleTimeoutRef.current);
+        };
+    }, []);
+
 // Add this function to handle form submission
     const handleUpdateConfig = async () => {
         // Basic validation
@@ -103,11 +162,11 @@ const ProjectDetails: React.FC = () => {
             shellCommand: ''
         };
 
-        if (!configForm.githubUrl) {
-            errors.githubUrl = 'Repository URL is required';
-        } else if (!configForm.githubUrl.includes('github.com')) {
-            errors.githubUrl = 'Please enter a valid GitHub URL';
-        }
+        // if (!configForm.githubUrl) {
+        //     errors.githubUrl = 'Repository URL is required';
+        // } else if (!configForm.githubUrl.includes('github.com')) {
+        //     errors.githubUrl = 'Please enter a valid GitHub URL';
+        // }
 
         if (!configForm.branch) {
             errors.branch = 'Branch is required';
@@ -178,6 +237,20 @@ const ProjectDetails: React.FC = () => {
         setIsEditMode(true);
     };
 
+    //schedule project
+    const scheduleExecution = async (projectId: number, datetime: string) => {
+        try {
+            console.log('Scheduling project execution for ID:', projectId, 'at', datetime);
+            // const url = `http://localhost:8095/${projectId}/schedule-execution?datetime=${datetime}:00`;
+            // const response = await fetch(url, { method: 'POST' });
+            const response : any = await scheduleProjectExecution(projectId, datetime);
+            console.log('Schedule response:', response);
+            return {success : response.data, message: 'Project execution scheduled successfully'};
+        } catch (error) {
+            return { success: false, message: error?.toString() || 'Unknown error' };
+        }
+    };
+
 // Add this function to handle form changes
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const {name, value} = e.target;
@@ -207,16 +280,23 @@ const ProjectDetails: React.FC = () => {
         }
     }, [user, projectId]);
 
-    // Auto refresh logs if enabled and project is running
     useEffect(() => {
         let interval: NodeJS.Timeout;
-        if (autoRefresh && project?.projectStatus === 'RUNNING' && projectId) {
-            interval = setInterval(() => {
-                fetchNewLogs(projectId);
-            }, 5000);
+
+        // If project is running, poll for updates
+        if (project?.projectStatus === 'RUNNING') {
+            interval = setInterval(async () => {
+                if (projectId) {
+                    await loadProjectDetails(projectId);
+                    await fetchNewLogs(projectId);
+                }
+            }, 5000); // Poll every 5 seconds
         }
-        return () => clearInterval(interval);
-    }, [autoRefresh, project?.projectStatus, projectId]);
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [project?.projectStatus, projectId]);
 
     const loadProjectDetails = async (id: number) => {
         setIsLoading(true);
@@ -316,11 +396,11 @@ const ProjectDetails: React.FC = () => {
     //     }
     // };
 
-    const refreshBuildLogs = async () => {
-        setRefreshingBuildLogs(true);
-        await loadBuildHistory();  // or however you're fetching logs
-        setRefreshingBuildLogs(false);
-    };
+    // const refreshBuildLogs = async () => {
+    //     setRefreshingBuildLogs(true);
+    //     await loadBuildHistory();  // or however you're fetching logs
+    //     setRefreshingBuildLogs(false);
+    // };
 
     const loadBuildHistory = async () => {
         const response = await getAllBuildLogs(projectId!!);
@@ -335,27 +415,49 @@ const ProjectDetails: React.FC = () => {
         setBuildHistory(sortedLogs);
     };
 
+    // const getBuildLogs =async () => {
+    //     const response = await getAllBuildLogs(projectId!!);
+    //     setBuildHistory( response.data || []);
+    // }
 
     const executeProjectBuild = async () => {
         if (!projectId) return;
 
         setIsExecuting(true);
         try {
-            await executeProject(projectId);
-            fetchNewLogs(projectId)
-            loadProjectDetails(projectId);
-            setActiveTab('logs');
-            setAutoRefresh(true);
+            const response = await executeProject(projectId);
+            if (response.success) {
+                // Update logs
+                await fetchNewLogs(projectId);
+                // Fetch latest project details to get updated status
+                await loadProjectDetails(projectId);
+                // Refresh build history
+                await loadBuildHistory();
+                setActiveTab('logs');
+
+                // Show success toast
+                toast.success('Build started successfully');
+            } else {
+                toast.error('Failed to start build');
+            }
         } catch (error) {
             console.error("Failed to execute project:", error);
+            toast.error('Failed to execute project');
         } finally {
             setIsExecuting(false);
         }
     };
 
-    const toggleAutoRefresh = () => {
-        setAutoRefresh(!autoRefresh);
+    const refreshLogs = async () => {
+        if (projectId) {
+            await fetchAllLogs(projectId);
+            toast.success('Logs refreshed');
+        }
     };
+
+    // const toggleAutoRefresh = () => {
+    //     setAutoRefresh(!autoRefresh);
+    // };
 
     const setSampleProject = () => {
         const sampleProject: Project = {
@@ -589,11 +691,19 @@ const ProjectDetails: React.FC = () => {
                                             )}
                                         </button>
                                         <button
+                                            onClick={() => setShowScheduleModal(true)}
                                             className="flex items-center bg-white text-blue-600 border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
                                         >
-                                            <Settings className="h-5 w-5 mr-2"/>
-                                            Settings
+                                            <Clock className="h-5 w-5 mr-2" />
+                                            Schedule Build
                                         </button>
+                                            <button
+                                                className="flex items-center bg-white text-blue-600 border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
+                                                onClick={() => router.push(`/projects/${projectId}/settings`)}
+                                            >
+                                                <Settings className="h-5 w-5 mr-2"/>
+                                                Settings
+                                            </button>
                                     </div>
                                 </div>
                                 <p className="text-gray-700 mt-2">{project.description}</p>
@@ -688,6 +798,16 @@ const ProjectDetails: React.FC = () => {
                                     >
                                         Configuration
                                     </button>
+                                    <button
+                                        onClick={() => setActiveTab('pipeline')}
+                                        className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                                            activeTab === 'pipeline'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        Pipeline
+                                    </button>
                                 </nav>
                             </div>
 
@@ -697,7 +817,7 @@ const ProjectDetails: React.FC = () => {
                                 {activeTab === 'overview' && (
                                     <div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            {/* Project Summary */}
+                                        {/* Project Summary */}
                                             <div className="bg-gray-50 rounded-lg p-4">
                                                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Project
                                                     Summary</h3>
@@ -815,22 +935,24 @@ const ProjectDetails: React.FC = () => {
                                             <h3 className="text-lg font-semibold text-gray-900">Build Logs</h3>
                                             <div className="flex space-x-2">
                                                 <button
-                                                    onClick={toggleAutoRefresh}
-                                                    className={`flex items-center px-3 py-1 rounded-md text-sm ${
-                                                        autoRefresh
-                                                            ? 'bg-blue-100 text-blue-600'
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
+                                                    onClick={refreshLogs}
+                                                    className="flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200 px-3 py-1 rounded-md text-sm"
                                                 >
-                                                    <RefreshCw
-                                                        className={`h-4 w-4 mr-1 ${autoRefresh ? 'animate-spin' : ''}`}/>
-                                                    {autoRefresh ? 'Auto-refresh On' : 'Auto-refresh Off'}
+                                                    <RefreshCw className="h-4 w-4 mr-1"/>
+                                                    Refresh
                                                 </button>
                                                 <button
                                                     className="flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200 px-3 py-1 rounded-md text-sm"
                                                 >
                                                     <Download className="h-4 w-4 mr-1"/>
                                                     Download
+                                                </button>
+                                                <button
+                                                    className="flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200 px-3 py-1 rounded-md text-sm"
+                                                    onClick={clearLogs} // Clear logs
+                                                >
+                                                    <Trash className="h-4 w-4 mr-1"/>
+                                                    Clear Logs
                                                 </button>
                                             </div>
                                         </div>
@@ -862,17 +984,11 @@ const ProjectDetails: React.FC = () => {
                                             <h3 className="text-lg font-semibold text-gray-900 mb-4">Build
                                                 History</h3>
                                             <button
-                                                onClick={refreshBuildLogs}
-                                                className={`flex items-center px-3 py-1 rounded-md text-sm ${
-                                                    autoRefresh
-                                                        ? 'bg-blue-100 text-blue-600'
-                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                }`}
+                                                onClick={loadBuildHistory}
+                                                className="flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200 px-3 py-1 rounded-md text-sm"
                                             >
-                                                <RefreshCw
-                                                    className={`h-4 w-4 mr-1 ${refreshingBuildLogs ? 'animate-spin' : ''}`}
-                                                />
-                                                {refreshingBuildLogs ? 'Refreshing...' : 'Refresh'}
+                                                <RefreshCw className="h-4 w-4 mr-1"/>
+                                                Refresh
                                             </button>
 
                                         </div>
@@ -939,6 +1055,66 @@ const ProjectDetails: React.FC = () => {
                                     </div>
                                 )}
 
+                                {activeTab === 'pipeline' && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Configuration</h3>
+                                        {project?.pipelineConfig ? (
+                                            <div className="space-y-6">
+                                                <div className="bg-gray-50 rounded-lg p-4">
+                                                    <h4 className="font-medium text-gray-900 mb-3">Pipeline Information</h4>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                                Pipeline Name
+                                                            </label>
+                                                            <div className="text-sm font-medium">
+                                                                {project.pipelineConfig.name}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-gray-50 rounded-lg p-4">
+                                                    <h4 className="font-medium text-gray-900 mb-3">Pipeline Stages</h4>
+                                                    <div className="space-y-4">
+                                                        {project.pipelineConfig.stages.map((stage, index) => (
+                                                            <div key={stage.id} className="border border-gray-200 rounded-lg p-4">
+                                                                <div className="flex justify-between items-center mb-2">
+                                                                    <h4 className="font-medium text-gray-900">
+                                                                        Stage {index + 1}: {stage.name}
+                                                                    </h4>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                                        Command
+                                                                    </label>
+                                                                    <pre className="bg-gray-800 text-white p-3 rounded-md mt-1 overflow-x-auto text-sm">
+                                        {stage.command}
+                                    </pre>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-gray-50 rounded-lg p-6 text-center">
+                                                <Terminal className="h-12 w-12 mx-auto text-gray-400 mb-4"/>
+                                                <h4 className="font-medium text-gray-900 mb-2">No Pipeline Configured</h4>
+                                                <p className="text-gray-600 mb-4">
+                                                    This project doesn't have a pipeline configuration yet.
+                                                </p>
+                                                <button
+                                                    onClick={() => setShowConfigurePipeline(true)}
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                                                >
+                                                    Configure Pipeline
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Configuration Tab */}
                                 {activeTab === 'config' && (
                                     <div>
@@ -950,7 +1126,7 @@ const ProjectDetails: React.FC = () => {
                                                     onClick={startEditing}
                                                     className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
                                                 >
-                                                    <Settings className="h-4 w-4 mr-2"/>
+                                                <Settings className="h-4 w-4 mr-2"/>
                                                     Edit Configuration
                                                 </button>
                                             )}
@@ -1171,7 +1347,44 @@ const ProjectDetails: React.FC = () => {
                         </button>
                     </div>
                 )}
+                {showScheduleModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                        <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+                            <h3 className="text-lg font-semibold mb-4">Schedule Project Execution</h3>
+                            <label className="block text-sm font-medium mb-2">
+                                Select Date & Time
+                            </label>
+                            <input
+                                type="datetime-local"
+                                className="w-full border border-gray-300 rounded px-3 py-2 mb-4"
+                                value={scheduleDateTime}
+                                onChange={e => setScheduleDateTime(e.target.value)}
+                            />
+                            <div className="flex justify-end space-x-2">
+                                <button
+                                    onClick={() => setShowScheduleModal(false)}
+                                    className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowScheduleModal(false);
+                                        // Call your scheduling handler here, e.g. handleScheduleBuild()
+                                        handleScheduleBuild()
+                                    }}
+                                    className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                    disabled={!scheduleDateTime}
+                                >
+                                    Continue
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
+
+
 
             <footer className="bg-gray-800 text-white py-8 mt-8">
                 <div className="container mx-auto px-4">
@@ -1195,6 +1408,8 @@ const ProjectDetails: React.FC = () => {
                     </div>
                 </div>
             </footer>
+
+
         </div>
     );
 };

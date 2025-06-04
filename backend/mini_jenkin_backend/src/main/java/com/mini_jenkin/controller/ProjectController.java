@@ -3,13 +3,16 @@ package com.mini_jenkin.controller;
 import com.mini_jenkin.entity.Project;
 import com.mini_jenkin.entity.ProjectConfig;
 import com.mini_jenkin.payload.ApiResponse;
+import com.mini_jenkin.payload.ProjectRequest;
 import com.mini_jenkin.service.serviceInterface.ProjectServiceInterface;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@Slf4j
 @RequestMapping("/project")
 public class ProjectController {
 
@@ -17,8 +20,9 @@ public class ProjectController {
     private ProjectServiceInterface projectService;
 
     @PostMapping("/create")
-    public ResponseEntity<ApiResponse<Project>> createProject(@RequestBody Project project) {
-        Project createdProject = projectService.createProject(project);
+    public ResponseEntity<ApiResponse<Project>> createProject(@RequestBody ProjectRequest projectRequest) {
+        log.info("project request : {} ", projectRequest );
+        Project createdProject = projectService.createProject(projectRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(createdProject, "Project created successfully"));
     }
@@ -73,5 +77,12 @@ public class ProjectController {
         projectService.deleteProject(projectId);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(ApiResponse.success(null, "Project deleted successfully"));
+    }
+
+    @DeleteMapping("/clear-logs/{projectId}")
+    public ResponseEntity<ApiResponse<Void>> clearLogs(@PathVariable Long projectId) {
+        projectService.clearProjectLogs(projectId);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(ApiResponse.success(null, "Project logs cleared successfully"));
     }
 }

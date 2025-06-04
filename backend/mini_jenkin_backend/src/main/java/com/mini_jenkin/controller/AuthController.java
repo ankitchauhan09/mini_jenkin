@@ -24,6 +24,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserDto>> registerUser(@RequestBody User user) {
+        log.info("Registering user: {}", user);
         UserDto registeredUser = authService.registerUser(user);
         log.info("user", registeredUser);
         return ResponseEntity.status(HttpStatus.CREATED)

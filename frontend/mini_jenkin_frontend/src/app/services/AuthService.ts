@@ -48,6 +48,16 @@ class ApiService {
         }
     }
 
+    static async delete<T>(baseUrl: string, endpoint: string, params?: Record<string, any>): Promise<ApiResponse<T> | ErrorApiResponse> {
+        const api = this.createInstance(baseUrl);
+        try {
+            const response = await api.delete(endpoint, {params});
+            return {success: true, data: response.data.data, message: response.data.message};
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
     private static handleError(error: any): ErrorApiResponse {
         console.error(error);
         return {

@@ -1,4 +1,4 @@
-package com.mini_jenkin.service.projectbuild;
+package com.mini_jenkin.utility;
 
 import com.mini_jenkin.entity.Project;
 import com.mini_jenkin.entity.ProjectLogs;
@@ -14,17 +14,19 @@ import java.time.LocalDateTime;
 
 @Slf4j
 @Component
-public class CloneStage implements BuildStage {
+public class CloneStage {
+
+    private final ProjectLogServiceInterface projectLogService;
 
     @Autowired
-    private ProjectLogServiceInterface projectLogService;
+    public CloneStage(ProjectLogServiceInterface projectLogService) {
+        this.projectLogService = projectLogService;
+    }
 
-    @Override
-    public void execute(Project project, File workingDir) {
+    public String cloneOrPullGithubRepo(Project project, File workingDir) {
+        File workingDirectory = new File(workingDir, project.getProjectName());
         try {
             String gitUrl = project.getProjectConfig().getGithubUrl();
-            File workingDirectory = new File(workingDir, project.getProjectName());
-
             if (workingDirectory.exists() && new File(workingDirectory, ".git").exists()) {
                 // repo already exists so update the existing repository
                 try {
@@ -55,6 +57,7 @@ public class CloneStage implements BuildStage {
                     throw new GeneralException(e.getMessage());
                 }
             }
+            return workingDirectory.getAbsolutePath();
         } catch (Exception e) {
             log.error("Error during clone stage execution: {}", e.getMessage(), e);
             throw e;

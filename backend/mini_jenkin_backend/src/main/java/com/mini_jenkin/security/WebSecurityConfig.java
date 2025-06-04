@@ -43,7 +43,7 @@ public class WebSecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorizeRequests -> authorizeRequests.requestMatchers("/auth/**").permitAll().anyRequest().authenticated());
+                .authorizeHttpRequests(authorizeRequests -> authorizeRequests.requestMatchers("/auth/**").permitAll().requestMatchers("/webhook/**").permitAll().anyRequest().authenticated());
         http.addFilterBefore(jwtAuthFilter,  UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

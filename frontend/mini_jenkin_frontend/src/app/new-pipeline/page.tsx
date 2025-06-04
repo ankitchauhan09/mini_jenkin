@@ -7,6 +7,22 @@ import { useUser } from "@/app/context/UserContext";
 import { ArrowLeft, FileText, GitBranch, Github, Play, Save, Terminal, Variable } from 'lucide-react';
 import { checkGithubUrl, createNewProject } from "@/app/services/PipelineService";
 
+// Project interfaces
+interface PipelineStage {
+    name: string;
+    command: string;
+}
+type ProjectStatus = 'PENDING' | 'ACTIVE' | 'FAILED' | 'COMPLETED';
+
+interface PipelineRequest {
+    name: string;
+    stages: PipelineStage[];
+}
+
+interface PipelineConfig {
+    pipelineRequest: PipelineRequest;
+}
+
 interface ProjectConfig {
     id?: number;
     githubUrl: string;
@@ -20,18 +36,19 @@ interface Project {
     projectId?: number;
     userId?: string;
     description: string;
-    projectStatus?: string;
+    projectStatus?: ProjectStatus;
     lastRun?: string;
     lastBuildTime?: string;
     projectName: string;
     createDateTime?: string;
     projectConfig?: ProjectConfig;
+    pipelineConfig?: PipelineConfig;
 }
-
 interface ProjectForm {
     projectName: string;
     description: string;
     projectConfig: ProjectConfig;
+    pipelineConfig: PipelineConfig;
 }
 
 const NewProject: React.FC = () => {
@@ -46,6 +63,12 @@ const NewProject: React.FC = () => {
             shellCommand: '',
             branch: 'main',
             environmentVariables: ''
+        },
+        pipelineConfig: {
+            pipelineRequest: {
+                name: '',
+                stages: [{ name: '', command: '' }]
+            }
         }
     });
 
@@ -62,23 +85,81 @@ const NewProject: React.FC = () => {
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
 
-        if (name.includes('.')) {
-            const [parent, child] = name.split('.');
-            if (parent === 'projectConfig') {
-                setFormState(prev => ({
-                    ...prev,
-                    projectConfig: {
-                        ...prev.projectConfig,
-                        [child]: value
+        // Handle array paths (e.g., pipelineConfig.pipelineRequest.stages[0].name)
+        if (name.includes('[') && name.includes(']')) {
+            const arrayPathRegex = /^(.+)\[(\d+)\]\.(.+)$/;
+            const match = name.match(arrayPathRegex);
+
+            if (match) {
+                const [, parentPath, indexStr, property] = match;
+                const index = parseInt(indexStr, 10);
+
+                setFormState(prev => {
+                    const parent = getNestedValue(prev, parentPath);
+                    if (Array.isArray(parent)) {
+                        const newArray = [...parent];
+                        if (index < newArray.length) {
+                            newArray[index] = {
+                                ...newArray[index],
+                                [property]: value
+                            };
+                            return setNestedValue(prev, parentPath, newArray);
+                        }
                     }
-                }));
+                    return prev;
+                });
+                return;
             }
+        }
+
+        // Handle dot notation paths
+        if (name.includes('.')) {
+            const keys = name.split('.');
+            setFormState(prev => {
+                const newState = { ...prev };
+                let current: any = newState;
+
+                for (let i = 0; i < keys.length - 1; i++) {
+                    const key = keys[i];
+                    if (!current[key]) {
+                        current[key] = {};
+                    }
+                    current = current[key];
+                }
+
+                current[keys[keys.length - 1]] = value;
+                return newState;
+            });
         } else {
             setFormState(prev => ({
                 ...prev,
                 [name]: value
             }));
         }
+    };
+
+    // Helper functions for nested state updates
+    const getNestedValue = (obj: any, path: string) => {
+        return path.split('.').reduce((acc, key) => {
+            return acc && acc[key];
+        }, obj);
+    };
+
+    const setNestedValue = (obj: any, path: string, value: any) => {
+        const keys = path.split('.');
+        const newObj = { ...obj };
+        let current: any = newObj;
+
+        for (let i = 0; i < keys.length - 1; i++) {
+            const key = keys[i];
+            if (!current[key]) {
+                current[key] = {};
+            }
+            current = current[key];
+        }
+
+        current[keys[keys.length - 1]] = value;
+        return newObj;
     };
 
     const validateForm = () => {
@@ -96,42 +177,51 @@ const NewProject: React.FC = () => {
             newErrors['projectConfig.githubUrl'] = 'Please enter a valid GitHub URL';
         }
 
+        // Validate pipeline stages
+        formState.pipelineConfig.pipelineRequest.stages.forEach((stage, index) => {
+            if (!stage.name.trim()) {
+                newErrors[`pipelineStageName-${index}`] = `Stage ${index + 1} name is required`;
+            }
+            if (!stage.command.trim()) {
+                newErrors[`pipelineStageCommand-${index}`] = `Stage ${index + 1} command is required`;
+            }
+        });
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
     const testConnection = async () => {
         if (!formState.projectConfig.githubUrl) {
-            setErrors({
-                ...errors,
+            setErrors(prev => ({
+                ...prev,
                 'projectConfig.githubUrl': 'Please enter a GitHub URL to test'
-            });
+            }));
             return;
         }
 
         try {
             const response = await checkGithubUrl(formState.projectConfig.githubUrl);
             if (!response.success) {
-                const newErrors = { ...errors };
-
-                if (response.detail.includes("private")) {
-                    newErrors['projectConfig.githubUrl'] = "This is a private repository. Please provide a public repository";
-                } else {
-                    newErrors['projectConfig.githubUrl'] = response.detail || response.message || "Invalid GitHub URL";
-                }
-
-                setErrors(newErrors);
+                setErrors(prev => ({
+                    ...prev,
+                    'projectConfig.githubUrl': response.detail.includes("private")
+                        ? "This is a private repository. Please provide a public repository"
+                        : response.detail || response.message || "Invalid GitHub URL"
+                }));
             } else {
-                const newErrors = { ...errors };
-                delete newErrors['projectConfig.githubUrl'];
-                setErrors(newErrors);
+                setErrors(prev => {
+                    const newErrors = { ...prev };
+                    delete newErrors['projectConfig.githubUrl'];
+                    return newErrors;
+                });
                 alert('GitHub repository is valid and accessible!');
             }
         } catch (error) {
-            setErrors({
-                ...errors,
+            setErrors(prev => ({
+                ...prev,
                 'projectConfig.githubUrl': 'Failed to verify repository URL'
-            });
+            }));
         }
     };
 
@@ -152,30 +242,51 @@ const NewProject: React.FC = () => {
                     shellCommand: formState.projectConfig.shellCommand,
                     branch: formState.projectConfig.branch,
                     environmentVariables: formState.projectConfig.environmentVariables
-                }
+                },
+                pipelineConfig: formState.pipelineConfig
             };
 
-            // const response = await fetch('http://localhost:8095/project/create', {
-            //     method: 'POST',
-            //     headers: {
-            //         'Content-Type': 'application/json',
-            //     },
-            //     body: JSON.stringify(project)
-            // });
             const response = await createNewProject(project);
-            console.log(response);
             if (!response.success) {
                 throw new Error(response.message + " = [" + response.detail + "]");
             }
             setSubmitSuccess(true);
             setTimeout(() => router.push('/dashboard'), 3000);
-
         } catch (error) {
             console.error('Failed to create project:', error);
             setErrors({ submit: error instanceof Error ? error.message : 'Failed to create project. Please try again.' });
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const addPipelineStage = () => {
+        setFormState(prev => ({
+            ...prev,
+            pipelineConfig: {
+                ...prev.pipelineConfig,
+                pipelineRequest: {
+                    ...prev.pipelineConfig.pipelineRequest,
+                    stages: [
+                        ...prev.pipelineConfig.pipelineRequest.stages,
+                        { name: '', command: '' }
+                    ]
+                }
+            }
+        }));
+    };
+
+    const removePipelineStage = (index: number) => {
+        setFormState(prev => ({
+            ...prev,
+            pipelineConfig: {
+                ...prev.pipelineConfig,
+                pipelineRequest: {
+                    ...prev.pipelineConfig.pipelineRequest,
+                    stages: prev.pipelineConfig.pipelineRequest.stages.filter((_, i) => i !== index)
+                }
+            }
+        }));
     };
 
     return (
@@ -369,7 +480,91 @@ API_URL=https://api.example.com"
                                 </div>
                             </div>
 
-                            {/* Additional Settings Section - can be expanded in the future */}
+                            {/* Pipeline Configuration */}
+                            <div>
+                                <h2 className="text-xl font-semibold text-gray-900 mb-4">Pipeline Configuration</h2>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Pipeline Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="pipelineConfig.pipelineRequest.name"
+                                        value={formState.pipelineConfig.pipelineRequest.name}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Enter pipeline name"
+                                    />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-2">Stages*</h3>
+                                    {formState.pipelineConfig.pipelineRequest.stages.map((stage, index) => (
+                                        <div key={index} className="mb-4 p-4 border border-gray-200 rounded-lg">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="font-medium text-gray-700">Stage {index + 1}</h4>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePipelineStage(index)}
+                                                    className="text-red-600 hover:text-red-800 text-sm"
+                                                    disabled={formState.pipelineConfig.pipelineRequest.stages.length <= 1}
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Stage Name*
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        name={`pipelineConfig.pipelineRequest.stages[${index}].name`}
+                                                        value={stage.name}
+                                                        onChange={handleInputChange}
+                                                        className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                            errors[`pipelineStageName-${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                        }`}
+                                                        placeholder="Enter stage name"
+                                                    />
+                                                    {errors[`pipelineStageName-${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-600">{errors[`pipelineStageName-${index}`]}</p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Command*
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        name={`pipelineConfig.pipelineRequest.stages[${index}].command`}
+                                                        value={stage.command}
+                                                        onChange={handleInputChange}
+                                                        className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                                            errors[`pipelineStageCommand-${index}`] ? 'border-red-500' : 'border-gray-300'
+                                                        }`}
+                                                        placeholder="Enter command"
+                                                    />
+                                                    {errors[`pipelineStageCommand-${index}`] && (
+                                                        <p className="mt-1 text-sm text-red-600">{errors[`pipelineStageCommand-${index}`]}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={addPipelineStage}
+                                        className="flex items-center text-blue-600 hover:text-blue-800 mt-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                        </svg>
+                                        Add Stage
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Additional Settings Section */}
                             <div>
                                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Additional
                                     Settings</h2>
@@ -392,46 +587,46 @@ API_URL=https://api.example.com"
                                 </div>
                             </div>
 
-                            {/* Form Actions */}
-                            <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-                                <button
-                                    type="button"
-                                    onClick={() => router.push('/dashboard')}
-                                    className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-70"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                                                 xmlns="http://www.w3.org/2000/svg" fill="none"
-                                                 viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10"
-                                                        stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor"
-                                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Creating...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Play className="h-5 w-5 mr-2"/>
-                                            Create Project
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
                             {errors.submit && (
                                 <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
                                     <p className="text-sm text-red-600">{errors.submit}</p>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Form Actions */}
+                        <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => router.push('/dashboard')}
+                                className="px-4 py-2 text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-70"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                                             xmlns="http://www.w3.org/2000/svg" fill="none"
+                                             viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10"
+                                                    stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor"
+                                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Creating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Play className="h-5 w-5 mr-2"/>
+                                        Create Project
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </form>
                 )}
@@ -443,8 +638,10 @@ API_URL=https://api.example.com"
                         <div className="mb-6 md:mb-0">
                             <div className="flex items-center">
                                 <div className="bg-blue-600 text-white p-2 rounded-md mr-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none"
+                                         viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                              d="M13 10V3L4 14h7v7l9-11h-7z"/>
                                     </svg>
                                 </div>
                                 <span className="text-lg font-semibold text-white">Mini Jenkins</span>

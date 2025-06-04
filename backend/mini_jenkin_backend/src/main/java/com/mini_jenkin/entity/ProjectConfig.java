@@ -2,16 +2,15 @@ package com.mini_jenkin.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Data
 @Builder    
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"project", "stages"})
+@EqualsAndHashCode(exclude = {"project", "stages"})
 public class ProjectConfig {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

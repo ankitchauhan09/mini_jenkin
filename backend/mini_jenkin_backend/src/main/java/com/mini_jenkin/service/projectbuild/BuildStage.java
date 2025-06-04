@@ -1,4 +1,10 @@
 package com.mini_jenkin.service.projectbuild;
 
-public class BuildStage {
+import com.mini_jenkin.entity.PipelineConfig;
+import com.mini_jenkin.entity.Project;
+
+import java.io.File;
+
+public interface BuildStage {
+    void execute(Project project, File workingDir) throws Exception;
 }

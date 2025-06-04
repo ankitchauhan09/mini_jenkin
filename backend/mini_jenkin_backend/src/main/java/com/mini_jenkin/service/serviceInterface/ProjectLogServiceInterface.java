@@ -9,5 +9,5 @@ public interface ProjectLogServiceInterface {
     ProjectLogs addProjectLog(ProjectLogs projectLog, Long projectId);
     List<ProjectLogs> getAllProjectLogs(Long projectId);
     ProjectLogs getProjectLogs(Long projectId);
-    void deleteProjectLogs(Long projectId);
+    Boolean deleteProjectLogs(Long projectId);
 }

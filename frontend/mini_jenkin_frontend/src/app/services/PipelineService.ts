@@ -43,6 +43,26 @@ export const checkGithubUrl = async (githubUrl: string) => {
     }
 };
 
+export const clearProjectLogs = async(projectId : number) => {
+    try {
+        return await apiService.delete(PROJECT_SERVICE_URL, `/clear-logs/${projectId}`);
+    } catch (error) {
+        console.error(error);
+        return handleError(error);
+    }
+}
+
+export const scheduleProjectExecution = async (projectId: number, datetime: string) => {
+    try {
+        // Ensure datetime is in ISO-8601 format (e.g., 2025-05-28T15:56:00)
+        const path = `/${projectId}/schedule-execution?datetime=${encodeURIComponent(datetime)}`;
+        return await apiService.post('http://localhost:8095', '', path);
+    } catch (error) {
+        console.error(error);
+        return handleError(error);
+    }
+};
+
 export const getProjectById = async (projectId: number) => {
     try {
         return await apiService.get(PROJECT_SERVICE_URL, `/${projectId}`);
@@ -54,7 +74,9 @@ export const getProjectById = async (projectId: number) => {
 
 export const getAllBuildLogs = async (projectId: number) => {
     try {
-        return await apiService.get(PROJECT_SERVICE_URL, `/build/all/${projectId}`);
+        const response =  await apiService.get(PROJECT_SERVICE_URL, `/build/all/${projectId}`);
+        console.log('Build logs response:', response);
+        return response
     } catch (error) {
         console.error(error);
         return handleError(error);

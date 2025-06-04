@@ -4,11 +4,12 @@ import com.mini_jenkin.entity.BuildLogs;
 import com.mini_jenkin.entity.Project;
 import com.mini_jenkin.entity.ProjectConfig;
 import com.mini_jenkin.entity.ProjectLogs;
+import com.mini_jenkin.payload.ProjectRequest;
 
 import java.util.List;
 
 public interface ProjectServiceInterface {
-    public Project createProject(Project project);
+    public Project createProject(ProjectRequest projectRequest);
     public Project getProject(Long id);
     public void deleteProject(Long id);
     public List<Project> getAllProjects(String userId);
@@ -26,4 +27,6 @@ public ProjectConfig updateProjectInfo(ProjectConfig projectConfig, Long project
     BuildLogs getBuildLogById(Integer id);
 
     List<BuildLogs> getAllBuildLogs(Long projectId);
+
+    Boolean clearProjectLogs(Long projectId);
 }

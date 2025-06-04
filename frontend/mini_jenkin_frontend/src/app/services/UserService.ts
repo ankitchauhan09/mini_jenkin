@@ -22,7 +22,7 @@ const login = async (email: string, password: string) => {
     }
 }
 
-const register = async (email: string, password: string, name: string) => {
+const registerUser = async (email: string, password: string, name: string) => {
     try {
         const response = await apiService.post(AUTH_SERVICE_URL, {
             email: email,
@@ -36,5 +36,5 @@ const register = async (email: string, password: string, name: string) => {
     }
 }
 
-export {login, register};
+export {login, registerUser};
 

@@ -2,6 +2,22 @@ server:
   port: 8095
 
 spring:
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ankit2211chauhan@gmail.com
+    password: nkfk nziu ehyk fwms
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: smtp.gmail.com
+
   datasource:
     url: jdbc:postgresql://localhost:5432/mini_jenkin
     username: postgres
@@ -14,6 +30,21 @@ spring:
     jdbc:
       dialect: postgresql
 
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: always
+    properties:
+      org:
+        quartz:
+          scheduler:
+            instance-name: MiniJenkinsScheduler
+          threadPool:
+            threadCount: 10
+          jobStore:
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+            isClustered: true
+            useProperties: false
 
 default:
   REPO_BASE_DIR: "C:\\mini-jenkin\\files\\"

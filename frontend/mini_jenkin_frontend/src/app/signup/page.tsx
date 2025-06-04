@@ -6,13 +6,26 @@ import Link from 'next/link';
 import FormInput from '../components/auth/FormInput';
 import SocialButton from '../components/auth/SocialButton';
 import PasswordStrength from '../components/auth/PasswordStrength';
+import {register, registerUser} from '../services/UserService';
+import {toast} from "sonner";
+import {useRouter} from "next/navigation";
 
 const SignupPage = () => {
+    const router = useRouter();
     const { register, handleSubmit, watch, formState: { errors } } = useForm();
     const [password, setPassword] = useState('');
 
-    const onSubmit = (data: any) => {
+    const onSubmit = async (data: any) => {
         console.log(data);
+        const response = await registerUser(data.email, data.password, data.name)
+        if(response.success) {
+            // Handle successful registration, e.g., redirect to login or dashboard
+            toast("Registration successful:", response.data);
+            router.push('/login');
+        } else {
+            // Handle registration error, e.g., show a toast notification
+            console.error("Registration failed:", response.message);
+        }
     };
 
     return (

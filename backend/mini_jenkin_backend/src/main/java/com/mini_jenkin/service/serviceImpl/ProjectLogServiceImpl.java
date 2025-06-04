@@ -3,6 +3,7 @@ package com.mini_jenkin.service.serviceImpl;
 import com.mini_jenkin.entity.ProjectLogs;
 import com.mini_jenkin.repository.ProjectLogRepository;
 import com.mini_jenkin.service.serviceInterface.ProjectLogServiceInterface;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -45,10 +46,12 @@ public class ProjectLogServiceImpl implements ProjectLogServiceInterface {
     }
 
     @Override
-    public void deleteProjectLogs(Long projectId) {
+    @Transactional
+    public Boolean deleteProjectLogs(Long projectId) {
         if (projectId == null) {
             throw new RuntimeException("Project ID cannot be null");
         }
         projectLogRepository.deleteByProjectId(projectId);
+        return true;
     }
 }
