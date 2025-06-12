@@ -9,7 +9,7 @@ import lombok.ToString;
 import java.util.List;
 
 @Data
-@Entity(name = "pipelineconfig")
+    @Entity(name = "pipelineconfig")
 @ToString(exclude = {"project", "stages"})
 @EqualsAndHashCode(exclude = {"project", "stages"})
 public class PipelineConfig {

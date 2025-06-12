@@ -184,6 +184,7 @@
                         .log("Stage '" + stage.getName() + "' failed with exit code " + exitCode)
                         .logTime(LocalDateTime.now())
                         .build(), project.getProjectId());
+
                 throw new RuntimeException("Stage '" + stage.getName() + "' failed.");
             } else {
                 projectLogService.addProjectLog(ProjectLogs.builder()
@@ -191,6 +192,14 @@
                         .log("Stage '" + stage.getName() + "' succeeded.\nOutput:\n" + output)
                         .logTime(LocalDateTime.now())
                         .build(), project.getProjectId());
+                User user = userRepository.findById(project.getUserId())
+                        .orElseThrow(() -> new ResourceNotFoundException("User not found for id: " + project.getUserId()));
+
+                emailSendingService.sendEmail(MailObject.builder()
+                        .recipient(user.getEmail())
+                        .subject("Build Success Notification")
+                        .msgBody(buildSuccessEmailBody(project.getProjectName(), output.toString()))
+                        .build());
                 log.info("Stage '{}' completed successfully in {}", stage.getName(), duration);
             }
 

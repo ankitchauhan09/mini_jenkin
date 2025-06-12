@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Link2, CheckCircle, Copy } from "lucide-react";
 
 const WEBHOOK_URL = (projectId: number) =>
-    `https://be64-2409-40e3-3052-1b18-a192-fa25-f1e5-802f.ngrok-free.app/webhook/github/${projectId}`;
+    `https://b244-2409-40e3-31dd-5e95-3ce4-9565-be21-a223.ngrok-free.app/webhook/github/${projectId}`;
 
 const ProjectSettings: React.FC = () => {
     const params = useParams();
