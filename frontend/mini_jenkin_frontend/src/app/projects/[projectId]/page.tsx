@@ -1,6 +1,6 @@
 // pages/project/[id].tsx
 "use client";
-import React, {useEffect, useState, useRef  } from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import Head from 'next/head';
 import {useParams, useRouter} from "next/navigation";
 import Navbar from '../../components/Navbar';
@@ -27,10 +27,13 @@ import {
     getAllBuildLogs,
     getProjectById,
     getProjectLogs,
-    loadAllProjectLogs, scheduleProjectExecution,
+    loadAllProjectLogs,
+    scheduleProjectExecution,
+    updatePipelineConfig,
     updateProjectConfig
 } from "@/app/services/PipelineService";
-import { toast } from 'sonner';
+import {toast} from 'sonner';
+
 // Add PipelineStage and PipelineRequest interfaces
 interface PipelineStage {
     name: string;
@@ -103,6 +106,53 @@ const ProjectDetails: React.FC = () => {
     const [isScheduling, setIsScheduling] = useState(false);
     const scheduleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isEditMode, setIsEditMode] = useState<Boolean>(false)
+    const [isPipelineEditMode, setIsPipelineEditMode] = useState(false);
+    const [pipelineForm, setPipelineForm] = useState<PipelineConfig>({
+        pipelineRequest: {
+            name: project?.pipelineConfig?.pipelineRequest?.name || '',
+            stages: project?.pipelineConfig?.pipelineRequest?.stages || []
+        }
+    });
+    const handlePipelineEditMode = () => {
+        setIsPipelineEditMode(true);
+        console.log('Pipeline edit mode enabled');
+        console.log(project?.pipelineConfig)
+        setPipelineForm({
+            pipelineRequest: {
+                name: project?.pipelineConfig?.name || '',
+                stages: project?.pipelineConfig?.stages?.map(stage => ({
+                    name: stage.name || '',
+                    command: stage.command || ''
+                })) || []
+            }
+        });
+    };
+    const handlePipelineSubmit = async () => {
+        if (!project?.pipelineConfig?.id) return;
+        console.log(pipelineForm)
+        try {
+            const response = await updatePipelineConfig(project?.pipelineConfig?.id, pipelineForm);
+
+            if (response.success) {
+                // Update the local project state with the new pipeline config
+                setProject(prevProject => {
+                    if (!prevProject) return null;
+                    return {
+                        ...prevProject,
+                        pipelineConfig: response.data.pipelineConfig
+                    };
+                });
+
+                setIsPipelineEditMode(false);
+                toast.success('Pipeline configuration updated successfully');
+            } else {
+                toast.error(response.message || 'Failed to update pipeline configuration');
+            }
+        } catch (error) {
+            console.error('Error updating pipeline:', error);
+            toast.error('Failed to update pipeline configuration');
+        }
+    };
     const [configForm, setConfigForm] = useState({
         githubUrl: '',
         branch: '',
@@ -118,7 +168,7 @@ const ProjectDetails: React.FC = () => {
 
     const clearLogs = async () => {
         const response = await clearProjectLogs(projectId!!);
-        if(response.success) {
+        if (response.success) {
             setLogs([])
             toast('Project logs cleared successfully');
         } else {
@@ -243,11 +293,11 @@ const ProjectDetails: React.FC = () => {
             console.log('Scheduling project execution for ID:', projectId, 'at', datetime);
             // const url = `http://localhost:8095/${projectId}/schedule-execution?datetime=${datetime}:00`;
             // const response = await fetch(url, { method: 'POST' });
-            const response : any = await scheduleProjectExecution(projectId, datetime);
+            const response: any = await scheduleProjectExecution(projectId, datetime);
             console.log('Schedule response:', response);
-            return {success : response.data, message: 'Project execution scheduled successfully'};
+            return {success: response.data, message: 'Project execution scheduled successfully'};
         } catch (error) {
-            return { success: false, message: error?.toString() || 'Unknown error' };
+            return {success: false, message: error?.toString() || 'Unknown error'};
         }
     };
 
@@ -694,16 +744,16 @@ const ProjectDetails: React.FC = () => {
                                             onClick={() => setShowScheduleModal(true)}
                                             className="flex items-center bg-white text-blue-600 border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
                                         >
-                                            <Clock className="h-5 w-5 mr-2" />
+                                            <Clock className="h-5 w-5 mr-2"/>
                                             Schedule Build
                                         </button>
-                                            <button
-                                                className="flex items-center bg-white text-blue-600 border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
-                                                onClick={() => router.push(`/projects/${projectId}/settings`)}
-                                            >
-                                                <Settings className="h-5 w-5 mr-2"/>
-                                                Settings
-                                            </button>
+                                        <button
+                                            className="flex items-center bg-white text-blue-600 border border-blue-600 px-4 py-2 rounded-md hover:bg-blue-50 transition-colors shadow-sm"
+                                            onClick={() => router.push(`/projects/${projectId}/settings`)}
+                                        >
+                                            <Settings className="h-5 w-5 mr-2"/>
+                                            Settings
+                                        </button>
                                     </div>
                                 </div>
                                 <p className="text-gray-700 mt-2">{project.description}</p>
@@ -817,7 +867,7 @@ const ProjectDetails: React.FC = () => {
                                 {activeTab === 'overview' && (
                                     <div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Project Summary */}
+                                            {/* Project Summary */}
                                             <div className="bg-gray-50 rounded-lg p-4">
                                                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Project
                                                     Summary</h3>
@@ -1057,20 +1107,27 @@ const ProjectDetails: React.FC = () => {
 
                                 {activeTab === 'pipeline' && (
                                     <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Configuration</h3>
-                                        {project?.pipelineConfig ? (
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-semibold text-gray-900">Pipeline
+                                                Configuration</h3>
+                                            {!isPipelineEditMode && (
+                                                <button
+                                                    onClick={handlePipelineEditMode}
+                                                    className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+                                                >
+                                                    <Settings className="h-4 w-4 mr-2"/>
+                                                    Edit Pipeline
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {project?.pipelineConfig && !isPipelineEditMode ? (
                                             <div className="space-y-6">
                                                 <div className="bg-gray-50 rounded-lg p-4">
-                                                    <h4 className="font-medium text-gray-900 mb-3">Pipeline Information</h4>
-                                                    <div className="space-y-3">
-                                                        <div>
-                                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                                Pipeline Name
-                                                            </label>
-                                                            <div className="text-sm font-medium">
-                                                                {project.pipelineConfig.name}
-                                                            </div>
-                                                        </div>
+                                                    <h4 className="font-medium text-gray-900 mb-3">Pipeline
+                                                        Information</h4>
+                                                    <div className="text-sm">
+                                                        <p className="font-medium">Name: {project.pipelineConfig.name}</p>
                                                     </div>
                                                 </div>
 
@@ -1078,34 +1135,155 @@ const ProjectDetails: React.FC = () => {
                                                     <h4 className="font-medium text-gray-900 mb-3">Pipeline Stages</h4>
                                                     <div className="space-y-4">
                                                         {project.pipelineConfig.stages.map((stage, index) => (
-                                                            <div key={stage.id} className="border border-gray-200 rounded-lg p-4">
-                                                                <div className="flex justify-between items-center mb-2">
-                                                                    <h4 className="font-medium text-gray-900">
-                                                                        Stage {index + 1}: {stage.name}
-                                                                    </h4>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                                        Command
-                                                                    </label>
-                                                                    <pre className="bg-gray-800 text-white p-3 rounded-md mt-1 overflow-x-auto text-sm">
-                                        {stage.command}
-                                    </pre>
-                                                                </div>
+                                                            <div key={index}
+                                                                 className="border border-gray-200 rounded-lg p-4">
+                                                                <h5 className="font-medium mb-2">Stage {index + 1}: {stage.name}</h5>
+                                                                <pre
+                                                                    className="bg-gray-800 text-white p-3 rounded-md text-sm overflow-x-auto">
+                                    {stage.command}
+                                </pre>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             </div>
+                                        ) : isPipelineEditMode ? (
+                                            <div className="space-y-6">
+                                                <div className="bg-gray-50 rounded-lg p-4">
+                                                    <h4 className="font-medium text-gray-900 mb-3">Pipeline
+                                                        Information</h4>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label
+                                                                className="block text-sm font-medium text-gray-700 mb-1">
+                                                                Pipeline Name
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={pipelineForm.pipelineRequest.name}
+                                                                onChange={(e) => setPipelineForm({
+                                                                    ...pipelineForm,
+                                                                    pipelineRequest: {
+                                                                        ...pipelineForm.pipelineRequest,
+                                                                        name: e.target.value
+                                                                    }
+                                                                })}
+                                                                className="w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 text-sm"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-gray-50 rounded-lg p-4">
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <h4 className="font-medium text-gray-900">Pipeline Stages</h4>
+                                                        <button
+                                                            onClick={() => setPipelineForm({
+                                                                ...pipelineForm,
+                                                                pipelineRequest: {
+                                                                    ...pipelineForm.pipelineRequest,
+                                                                    stages: [...pipelineForm.pipelineRequest.stages, {
+                                                                        name: '',
+                                                                        command: ''
+                                                                    }]
+                                                                }
+                                                            })}
+                                                            className="text-blue-600 hover:text-blue-700"
+                                                        >
+                                                            + Add Stage
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        {pipelineForm.pipelineRequest.stages.map((stage, index) => (
+                                                            <div key={index}
+                                                                 className="border border-gray-200 rounded-lg p-4">
+                                                                <div className="flex justify-between items-center mb-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder="Stage Name"
+                                                                        value={stage.name}
+                                                                        onChange={(e) => {
+                                                                            const newStages = [...pipelineForm.pipelineRequest.stages];
+                                                                            newStages[index] = {
+                                                                                ...stage,
+                                                                                name: e.target.value
+                                                                            };
+                                                                            setPipelineForm({
+                                                                                ...pipelineForm,
+                                                                                pipelineRequest: {
+                                                                                    ...pipelineForm.pipelineRequest,
+                                                                                    stages: newStages
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        className="rounded-md border border-gray-300 shadow-sm px-4 py-2 text-sm"
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const newStages = pipelineForm.pipelineRequest.stages.filter((_, i) => i !== index);
+                                                                            setPipelineForm({
+                                                                                ...pipelineForm,
+                                                                                pipelineRequest: {
+                                                                                    ...pipelineForm.pipelineRequest,
+                                                                                    stages: newStages
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        className="text-red-600 hover:text-red-700"
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </div>
+                                                                <textarea
+                                                                    placeholder="Stage Command"
+                                                                    value={stage.command}
+                                                                    onChange={(e) => {
+                                                                        const newStages = [...pipelineForm.pipelineRequest.stages];
+                                                                        newStages[index] = {
+                                                                            ...stage,
+                                                                            command: e.target.value
+                                                                        };
+                                                                        setPipelineForm({
+                                                                            ...pipelineForm,
+                                                                            pipelineRequest: {
+                                                                                ...pipelineForm.pipelineRequest,
+                                                                                stages: newStages
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                    rows={3}
+                                                                    className="w-full mt-2 rounded-md border border-gray-300 shadow-sm px-4 py-2 text-sm font-mono"
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-end space-x-3">
+                                                    <button
+                                                        onClick={() => setIsPipelineEditMode(false)}
+                                                        className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        onClick={handlePipelineSubmit}
+                                                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                                                    >
+                                                        Save Pipeline
+                                                    </button>
+                                                </div>
+                                            </div>
                                         ) : (
                                             <div className="bg-gray-50 rounded-lg p-6 text-center">
                                                 <Terminal className="h-12 w-12 mx-auto text-gray-400 mb-4"/>
-                                                <h4 className="font-medium text-gray-900 mb-2">No Pipeline Configured</h4>
+                                                <h4 className="font-medium text-gray-900 mb-2">No Pipeline
+                                                    Configured</h4>
                                                 <p className="text-gray-600 mb-4">
                                                     This project doesn't have a pipeline configuration yet.
                                                 </p>
                                                 <button
-                                                    onClick={() => setShowConfigurePipeline(true)}
+                                                    onClick={() => setIsPipelineEditMode(true)}
                                                     className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
                                                 >
                                                     Configure Pipeline
@@ -1126,7 +1304,7 @@ const ProjectDetails: React.FC = () => {
                                                     onClick={startEditing}
                                                     className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
                                                 >
-                                                <Settings className="h-4 w-4 mr-2"/>
+                                                    <Settings className="h-4 w-4 mr-2"/>
                                                     Edit Configuration
                                                 </button>
                                             )}
@@ -1383,7 +1561,6 @@ const ProjectDetails: React.FC = () => {
                     </div>
                 )}
             </main>
-
 
 
             <footer className="bg-gray-800 text-white py-8 mt-8">

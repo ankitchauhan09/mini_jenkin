@@ -1,5 +1,7 @@
 package com.mini_jenkin.controller;
 
+import com.mini_jenkin.dto.PipelineUpdateRequest;
+import com.mini_jenkin.entity.PipelineConfig;
 import com.mini_jenkin.entity.Project;
 import com.mini_jenkin.entity.ProjectConfig;
 import com.mini_jenkin.payload.ApiResponse;
@@ -27,12 +29,27 @@ public class ProjectController {
                 .body(ApiResponse.success(createdProject, "Project created successfully"));
     }
 
+    @PostMapping("/update/pipeline/{pipelineId}")
+    public ResponseEntity<ApiResponse<Object>> updatePipeline(@RequestBody PipelineUpdateRequest request, @PathVariable Long pipelineId) {
+        PipelineConfig pipelineConfig = new PipelineConfig();
+        pipelineConfig.setName(request.getPipelineRequest().getName());
+        pipelineConfig.setStages(request.getPipelineRequest().getStages());
+
+        Project updatedProject = projectService.updatePipeline(pipelineConfig, pipelineId);
+        return ResponseEntity.ok(ApiResponse.success(updatedProject, "Pipeline updated successfully"));
+    }
+
     @PostMapping("/update-project-info/{projectId}")
     public ResponseEntity<ApiResponse<Object>> updateProjectInfo(@RequestBody ProjectConfig projectConfig,@PathVariable Long projectId ) {
         Object updatedInfo = projectService.updateProjectInfo(projectConfig, projectId);
         return ResponseEntity.ok(ApiResponse.success(updatedInfo, "Project info updated successfully"));
     }
 
+
+    @GetMapping("/build-logs/{projectId}")
+    public ResponseEntity<ApiResponse<Object>> getBuildLogsByProjectId(@PathVariable Long projectId) {
+        return ResponseEntity.ok(ApiResponse.success(projectService.getAllBuildLogs(projectId), "Build logs fetched successfully"));
+    }
 
     @GetMapping("/build/{id}")
     public ResponseEntity<ApiResponse<Object>> getBuildLogs(@PathVariable Integer id) {

@@ -1,9 +1,6 @@
 package com.mini_jenkin.service.serviceInterface;
 
-import com.mini_jenkin.entity.BuildLogs;
-import com.mini_jenkin.entity.Project;
-import com.mini_jenkin.entity.ProjectConfig;
-import com.mini_jenkin.entity.ProjectLogs;
+import com.mini_jenkin.entity.*;
 import com.mini_jenkin.payload.ProjectRequest;
 
 import java.util.List;
@@ -29,4 +26,6 @@ public ProjectConfig updateProjectInfo(ProjectConfig projectConfig, Long project
     List<BuildLogs> getAllBuildLogs(Long projectId);
 
     Boolean clearProjectLogs(Long projectId);
+
+    Project updatePipeline(PipelineConfig pipelineConfig, Long pipelineId);
 }

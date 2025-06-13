@@ -7,6 +7,33 @@ export enum ProjectStatus {
     PENDING = 'PENDING',
 }
 
+export interface PipelineStage {
+    id?: number;
+    name: string;
+    command: string;
+}
+
+export interface PipelineConfig {
+    id?: number;
+    name: string;
+    stages: PipelineStage[];
+}
+
+export interface PipelineResponse {
+    data: {
+        projectId: number;
+        projectName: string;
+        userId: string;
+        projectStatus: string;
+        createDateTime: string;
+        lastBuildTime: string;
+        lastRun: string;
+        pipelineConfig: PipelineConfig;
+    };
+    message: string;
+    success: boolean;
+}
+
 export interface ProjectConfig {
     id?: number;
     githubUrl?: string | null;
@@ -25,6 +52,7 @@ export interface Project {
     projectName: string;
     createDateTime?: string;
     projectConfig?: ProjectConfig;
+    pipelineConfig?: PipelineConfig; // Add this line
 }
 
 const PROJECT_SERVICE_URL = process.env.NEXT_PUBLIC_PROJECT_SERVICE!;
@@ -40,6 +68,20 @@ export const checkGithubUrl = async (githubUrl: string) => {
     } catch (error) {
         console.error(error);
         return handleError(error); // If error occurs, handle it and return the error object
+    }
+};
+
+export const updatePipelineConfig = async (pipelineId: number, pipelineConfig: PipelineConfig) => {
+    try {
+        const response = await apiService.post(
+            PROJECT_SERVICE_URL,
+            pipelineConfig,
+            `/update/pipeline/${pipelineId}`
+        );
+        return response;
+    } catch (error) {
+        console.error(error);
+        return handleError(error);
     }
 };
 
